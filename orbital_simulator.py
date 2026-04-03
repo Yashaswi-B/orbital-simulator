@@ -1,7 +1,7 @@
 # Orbital Simulator — Stage 1
 # Models a satellite orbiting Earth under Newtonian gravity
 # Integration method: Euler (first-order)
-# Author: 
+# Author: Yashaswi Burugupalli
 # Started: March 2026
 
 
