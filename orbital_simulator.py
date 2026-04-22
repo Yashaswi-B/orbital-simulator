@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 G = 6.674e-11       # Gravitational constant (m³ kg⁻¹ s⁻²)
 M = 5.9722e24       # Mass of Earth (kg)
 r_orbit = 6.771e6   # Orbit radius: Earth's radius (6,371,000m) + altitude (400,000m)
+R_earth = 6.371e6   # Radius of Earth (m)
 
 
 # ─────────────────────────────────────────
@@ -43,3 +44,46 @@ def acceleration(r):
 # Verification: magnitude should be ~8.69 m/s² at 400,000m altitude
 _test = acceleration(r0)
 print(f"Gravity check — magnitude: {np.linalg.norm(_test):.4f} m/s²")
+
+# ─────────────────────────────────────────
+# Euler Integration
+# ─────────────────────────────────────────
+# At each timestep:
+# new_position = old_position + acceleration * dt
+# new_velocity = old_velocity + acceleration * dt
+num_orbits = 5
+dt = 10.0                           # Timestep (s)
+t = 5560.0                          # one orbital period (appromimation)
+steps = int((num_orbits * t) / dt)
+positions = np.zeros((steps, 2))    # pre-allocate: faster than appending
+
+r = r0.copy()
+v = v0.copy()
+
+for i in range(steps):
+    positions[i] = r       # record current position
+    a = acceleration(r)    # acceleration at current position
+    r = r + v * dt         # Update position using current velocity
+    v = v + a * dt         # Update velocity using current acceleration
+
+# ─────────────────────────────────────────
+# Plotting the Orbit
+# ─────────────────────────────────────────
+x_coords = positions[:, 0]
+y_coords = positions[:, 1]
+
+fig, ax = plt.subplots(figsize=(7, 7))
+ax.plot(x_coords, y_coords, color="blue", lw=1.2, label="Orbit")
+
+# Earth — Radius 6,371,000m
+earth = plt.Circle((0,0), R_earth, color="dodgerblue", label="Earth")
+ax.add_patch(earth)
+
+ax.set_aspect("equal")
+ax.set_title("Stage 1: 2D Euler Orbit (400,000m altitude)", fontsize=13)
+ax.set_xlabel("x position (m)", fontsize=10)
+ax.set_ylabel("y position (m)", fontsize=10)
+ax.legend()
+plt.tight_layout()
+plt.savefig("/Users/yasha/Desktop/orbital-simulator/img/stage1_orbit_v2.png", dpi=150, bbox_inches="tight")
+plt.show()
