@@ -87,3 +87,18 @@ ax.legend()
 plt.tight_layout()
 plt.savefig("/Users/yasha/Desktop/orbital-simulator/img/stage1_orbit_v2.png", dpi=150, bbox_inches="tight")
 plt.show()
+
+# ─────────────────────────────────────────
+# Kepler's Thrid Law Verification
+# ─────────────────────────────────────────
+# Independent check: does Newtonian gravity produce the correct orbital period?
+# Kepler's Third Law: T = 2*pi * sqrt(r^3 / GM) — derived analytically
+T_kepler = 2 * np.pi * np.sqrt(r_orbit**3 / (G * M))
+
+T_simulated =  (steps * dt) / num_orbits 
+error_pct = abs(T_simulated - T_kepler) / T_kepler * 100
+print(f"Kepler period: {T_kepler:.1f} s ({T_kepler/60:.2f} min)")
+print(f"Simulated Period: {T_simulated:.1f} s")
+print((f"period error: {error_pct:.2f}%"))
+print(f"Direction check: T_simulated {'>' if T_simulated > T_kepler else '<'} T_kepler — "
+      f"{'consistent with Euler energy gain' if T_simulated > T_kepler else 'unexpected — check integrator'}")
