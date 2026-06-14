@@ -80,6 +80,32 @@ def calculate_orbital_energy(positions, velocities):
     return initial_energy, final_energy, energy_drift_pct
 
 
+def measure_orbital_period(positions, dt):
+    # Measures the orbital period from trajectory data by detecting
+    # when the satellite completes a full orbit (y crosses zero from
+    # negative to positive, i.e. returns to the +x axis).
+    # Uses linear interpolation for sub-timestep accuracy.
+    crossing_times = []
+    for i in range(1, len(positions)):
+        y_prev = positions[i - 1, 1]
+        y_curr = positions[i, 1]
+        # Detect positive-going zero crossing (y goes from - to +)
+        if y_prev < 0 and y_curr >= 0:
+            # Linear interpolation to find precise crossing time
+            frac = -y_prev / (y_curr - y_prev)
+            t_cross = (i - 1 + frac) * dt
+            crossing_times.append(t_cross)
+
+    if len(crossing_times) < 2:
+        return None, []
+
+    # Period = time between consecutive crossings
+    periods = [crossing_times[j] - crossing_times[j - 1]
+               for j in range(1, len(crossing_times))]
+    avg_period = sum(periods) / len(periods)
+    return avg_period, periods
+
+
 def plot_results(positions, dt, steps, altitude):
     # Handles all matplotlib logic for plotting orbit and drift.
     os.makedirs("images", exist_ok=True)
@@ -133,7 +159,7 @@ if __name__ == "__main__":
 
     # 2. Simulation parameters
     num_orbits = 5
-    dt = 10.0
+    dt = 1.0
     r_orbit = R_earth + ALTITUDE
     T_kepler = 2 * np.pi * np.sqrt(r_orbit**3 / mu_earth)
     steps = round((num_orbits * T_kepler) / dt)
@@ -150,13 +176,19 @@ if __name__ == "__main__":
     print(f"Energy Drift (Euler):    {energy_drift_pct:.4f}%")
     print("Note: The 'phantom energy' drift observed is a direct result of the Taylor series truncation error of the Euler method.\n")
     
-    # Kepler period check
-    T_simulated = (steps * dt) / num_orbits
-    period_error_pct = abs(T_simulated - T_kepler) / T_kepler * 100
+    # Kepler period check — measured from trajectory data
+    T_measured, all_periods = measure_orbital_period(positions, dt)
     print("--- Kepler Period Verification ---")
     print(f"Kepler period:    {T_kepler:.1f} s ({T_kepler/60:.2f} min)")
-    print(f"Simulated period: {T_simulated:.1f} s")
-    print(f"Period error:     {period_error_pct:.2f}%\n")
+    if T_measured is not None:
+        period_error_pct = abs(T_measured - T_kepler) / T_kepler * 100
+        print(f"Measured period:  {T_measured:.1f} s (avg of {len(all_periods)} orbits)")
+        print(f"Period error:     {period_error_pct:.2f}%")
+        if len(all_periods) > 1:
+            print(f"  Per-orbit periods: {', '.join(f'{p:.1f} s' for p in all_periods)}")
+    else:
+        print("  Could not measure period (not enough complete orbits).")
+    print()
     
     # 5. Visualizations
     plot_results(positions, dt, steps, ALTITUDE)
