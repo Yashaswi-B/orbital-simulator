@@ -69,7 +69,7 @@ Something that came as a shock to me was the extremely large orbital period with
 
 #### Orbit Visualization
 
-![Figure 1: A 2D orbit of a 400 km satellite under Newtonian gravity with Euler integration.](./images/stage1_orbit.png)
+![Figure 1: A 2D orbit of a 400 km satellite under Newtonian gravity with Euler integration.](./images/stage1_Euler_orbit.png)
 *Figure 1: A 2D orbit of a 400 km satellite under Newtonian gravity with Euler integration.*
 
 The simulation successfully produced a closed orbital path initially with one iteration. However, when simulated over multiple orbital periods, I found that the orbit gradually expanded outward.
@@ -78,7 +78,7 @@ I learned this behavior was not caused by an error in the gravitational model bu
 
 #### Euler Drift
 
-![Figure 2: A plot of the radius error from the initial circular radius over time, in kilometres and minutes, spanning five orbital periods.](./images/stage1_drift.png)
+![Figure 2: A plot of the radius error from the initial circular radius over time, in kilometres and minutes, spanning five orbital periods.](./images/stage1_Euler_drift.png)
 *Figure 2: A plot of the radius error from the initial circular radius over time, in kilometres and minutes, spanning five orbital periods.*
 
 Over five orbital periods, the simulated orbit accumulated significant radial error. The spacecraft gradually gained orbital energy and spiraled away.

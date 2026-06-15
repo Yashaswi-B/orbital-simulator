@@ -1,6 +1,6 @@
-# Orbital Simulator — Stage 1
+# Orbital Simulator
 # Models a satellite orbiting Earth under Newtonian gravity
-# Integration method: Euler (first-order)
+# Integration method: Runge-Kutta 4th order (RK4)
 # Author: Yashaswi Burugupalli
 # Started: March 2026
 
@@ -19,6 +19,11 @@ R_earth = 6.371e6             # Radius of Earth (m)
 ALTITUDE = 400_000            # Orbital altitude above Earth's surface (m)
 
 
+# ─────────────────────────────────────────
+# INITIAL CONDITIONS
+# ISS-like orbit: 400km above Earth's surface
+# ─────────────────────────────────────────
+
 def calculate_initial_conditions(altitude):
     # Calculates the initial position and velocity for a circular orbit.
     r_orbit = R_earth + altitude
@@ -29,12 +34,20 @@ def calculate_initial_conditions(altitude):
     return r0, v0
 
 
-def acceleration(r):
-    # Computes gravitational acceleration at position r.
-    # Uses optimized inline magnitude calculation for performance.
-    r_mag = (r[0]**2 + r[1]**2)**0.5
-    return -mu_earth / r_mag**3 * r
+# ─────────────────────────────────────────
+# Gravity Function
+# ─────────────────────────────────────────
 
+def acceleration(r):
+    # Satellite mass cancels in F=ma — result independent of satellite mass
+    # Dividing by r_mag^3 combines magnitude (GM/r^2) and unit direction
+    r_mag = np.linalg.norm(r)
+    return -(mu_earth / r_mag**3) * r    # Negative sign: acceleration points towards Earth
+
+
+# ─────────────────────────────────────────
+# Forward Euler Integration
+# ─────────────────────────────────────────
 
 def simulate_euler(r0, v0, dt, steps):
     # Simulates the orbit using the Euler (first-order) integration method.
@@ -49,9 +62,7 @@ def simulate_euler(r0, v0, dt, steps):
         positions[i] = r
         velocities[i] = v
         
-        # Calculates acceleration with inline optimized magnitude calculation
-        r_mag = (r[0]**2 + r[1]**2)**0.5
-        a = -mu_earth / r_mag**3 * r
+        a = acceleration(r)
         
         # Updates position and velocity
         r = r + v * dt
@@ -59,6 +70,10 @@ def simulate_euler(r0, v0, dt, steps):
 
     return positions, velocities
 
+
+# ─────────────────────────────────────────
+# Specific Orbital Energy Calculation
+# ─────────────────────────────────────────
 
 def calculate_orbital_energy(positions, velocities):
     # Calculates the specific orbital energy at the start and end of the simulation.
@@ -79,6 +94,10 @@ def calculate_orbital_energy(positions, velocities):
     
     return initial_energy, final_energy, energy_drift_pct
 
+
+# ─────────────────────────────────────────
+# Kepler's Third Law Verification
+# ─────────────────────────────────────────
 
 def measure_orbital_period(positions, dt):
     # Measures the orbital period from trajectory data by detecting
@@ -106,11 +125,47 @@ def measure_orbital_period(positions, dt):
     return avg_period, periods
 
 
-def plot_results(positions, dt, steps, altitude):
+# ─────────────────────────────────────────
+# ODE Reduction: The Derivative Function
+# ─────────────────────────────────────────
+
+def deriv(state):
+
+    # Extracts position (first two elements) and velocity (last 2 elements)
+    r = state[:2]
+    v = state[2:]
+
+    # Computes acceleration based on current position
+    a = acceleration(r)
+
+    # Returns the derivative of the state: [vx, vy, ax, ay]
+    return np.concatenate([v, a])
+
+
+# ─────────────────────────────────────────
+# Runge-Kutta 4th order
+# ─────────────────────────────────────────
+
+def rk4step(state, dt):
+
+    # Calculates the four slopes (k1, k2, k3, k4) using the derivative function
+    k1 = deriv(state)
+    k2 = deriv(state + 0.5 * dt * k1)
+    k3 = deriv(state + 0.5 * dt * k2)
+    k4 = deriv(state + dt * k3)
+    
+    # Returns new state by using weighted average of the slopes
+    return state + (dt / 6) * (k1 + 2*k2 + 2*k3 + k4)
+
+# ─────────────────────────────────────────
+# Plotting the Orbit
+# ─────────────────────────────────────────
+
+def plot_results(positions, rk4_positions, dt, steps, altitude):
     # Handles all matplotlib logic for plotting orbit and drift.
     os.makedirs("images", exist_ok=True)
     
-    # 1. Plot Orbit
+    # 1. Plot Forward Euler Orbit
     x_coords = positions[:, 0]
     y_coords = positions[:, 1]
 
@@ -126,10 +181,10 @@ def plot_results(positions, dt, steps, altitude):
     ax.set_ylabel("y position (m)", fontsize=10)
     ax.legend()
     plt.tight_layout()
-    plt.savefig("images/stage1_orbit.png", dpi=150, bbox_inches="tight")
+    plt.savefig("images/stage1_Euler_orbit.png", dpi=150, bbox_inches="tight")
     plt.close()
 
-    # 2. Plot Orbital Drift
+    # 2. Plot Forward Euler Orbital Drift
     # Optimized radii magnitude calculation
     radii = np.sqrt(positions[:, 0]**2 + positions[:, 1]**2)
     radius_error = radii - radii[0]
@@ -142,7 +197,28 @@ def plot_results(positions, dt, steps, altitude):
     ax.set_title("Stage 1: Euler Integration Drift Over 5 Orbits", fontsize=13)
     ax.axhline(0, color="gray", ls="--", lw=0.8)
     plt.tight_layout()
-    plt.savefig("images/stage1_drift.png", dpi=150, bbox_inches="tight")
+    plt.savefig("images/stage1_Euler_drift.png", dpi=150, bbox_inches="tight")
+    plt.close()
+
+    # Plot RK4 Orbit
+    #print(positions[:,0])
+    x_coords = rk4_positions[:, 0]
+    y_coords = rk4_positions[:, 1]
+
+    fig, ax = plt.subplots(figsize=(7, 7))
+    ax.plot(x_coords, y_coords, color="blue", lw=1.2, label="Orbit")
+
+    # Earth — Radius 6,371,000m
+    earth = plt.Circle((0,0), R_earth, color="dodgerblue", label="Earth")
+    ax.add_patch(earth)
+
+    ax.set_aspect("equal")
+    ax.set_title(f"Stage 2: 2D RK4 Orbit ({ALTITUDE/1000:.0f} km altitude)", fontsize=13)
+    ax.set_xlabel("x position (m)", fontsize=10)
+    ax.set_ylabel("y position (m)", fontsize=10)
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig("images/stage2_RK4_orbit.png", dpi=150, bbox_inches="tight")
     plt.close()
 
 
@@ -159,7 +235,7 @@ if __name__ == "__main__":
 
     # 2. Simulation parameters
     num_orbits = 5
-    dt = 1.0
+    dt = 10.0
     r_orbit = R_earth + ALTITUDE
     T_kepler = 2 * np.pi * np.sqrt(r_orbit**3 / mu_earth)
     steps = round((num_orbits * T_kepler) / dt)
@@ -189,7 +265,21 @@ if __name__ == "__main__":
     else:
         print("  Could not measure period (not enough complete orbits).")
     print()
+
+    # 5. RK4 Simulation
+    initial_state = np.concatenate([r0, v0])
     
-    # 5. Visualizations
-    plot_results(positions, dt, steps, ALTITUDE)
+    rk4_positions = np.zeros((steps, 2))
+    s = initial_state.copy()
+
+    for i in range(steps):
+
+        # Records the current x,y positions
+        rk4_positions[i] = s[:2]
+
+        # Updates the state vector using RK4
+        s = rk4step(s, dt)
+    
+    # 6. Visualizations
+    plot_results(positions, rk4_positions, dt, steps, ALTITUDE)
     print("Plots saved to images/ directory.")
