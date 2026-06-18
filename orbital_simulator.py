@@ -70,6 +70,16 @@ def simulate_euler(r0, v0, dt, steps):
 
     return positions, velocities
 
+# Different version of simulate_euler() which takes a state vector whereas the original took separate r, v arrays.
+def euler_step(state, dt):
+    r = state[:2]
+    v = state[2:]
+    a = acceleration(r)
+
+    r_new = r + v * dt
+    v_new = v + a * dt
+    return np.concatenate([r_new, v_new])
+
 
 # ─────────────────────────────────────────
 # Specific Orbital Energy Calculation
@@ -158,19 +168,44 @@ def rk4step(state, dt):
     return state + (dt / 6) * (k1 + 2*k2 + 2*k3 + k4)
 
 # ─────────────────────────────────────────
+# Propagating Function
+# ─────────────────────────────────────────
+
+# Unified propagator — same initial state, same dt, only the step function changes.
+# This makes the Euler vs RK4 comparison as accurate as possible.
+
+def propagate(initial_state, dt, steps, method="rk4"):
+    step_func = rk4step if method=="rk4" else euler_step
+    states = np.zeros((steps, len(initial_state)))
+    s = initial_state.copy()
+
+    for i in range(steps):
+        states[i] = s
+        s = step_func(s, dt)
+    return states
+
+# ─────────────────────────────────────────
+# Energy and Angular Momentum Conservation Tracking
+# ─────────────────────────────────────────
+
+def specific_energy(r, v):
+    KE = 0.5 * np.dot(v, v)                 # Kinetic energy per unit mass: v²/2
+    PE = -mu_earth / np.linalg.norm(r)      # Potential energy per unit mass: -μ/r
+    return KE + PE                          # This value should remain constant in a correct simulation
+
+def angular_momentum(r, v):
+    return r[0]*v[1] - r[1]*v[0]            # This value should remain constant in a correct simulation
+
+# ─────────────────────────────────────────
 # Plotting the Orbit
 # ─────────────────────────────────────────
 
-def plot_results(positions, rk4_positions, dt, steps, altitude):
+def plot_results(dt, steps, altitude):
     # Handles all matplotlib logic for plotting orbit and drift.
     os.makedirs("images", exist_ok=True)
-    
-    # 1. Plot Forward Euler Orbit
-    x_coords = positions[:, 0]
-    y_coords = positions[:, 1]
 
     fig, ax = plt.subplots(figsize=(7, 7))
-    ax.plot(x_coords, y_coords, color="blue", lw=1.2, label="Orbit")
+    ax.plot(euler_x_coords, euler_y_coords, color="blue", lw=1.2, label="Orbit")
 
     earth = plt.Circle((0, 0), R_earth, color="dodgerblue", label="Earth")
     ax.add_patch(earth)
@@ -186,7 +221,7 @@ def plot_results(positions, rk4_positions, dt, steps, altitude):
 
     # 2. Plot Forward Euler Orbital Drift
     # Optimized radii magnitude calculation
-    radii = np.sqrt(positions[:, 0]**2 + positions[:, 1]**2)
+    radii = np.sqrt(euler_x_coords**2 + euler_y_coords**2)
     radius_error = radii - radii[0]
     time_array = np.arange(steps) * dt / 60
 
@@ -201,12 +236,11 @@ def plot_results(positions, rk4_positions, dt, steps, altitude):
     plt.close()
 
     # Plot RK4 Orbit
-    #print(positions[:,0])
-    x_coords = rk4_positions[:, 0]
-    y_coords = rk4_positions[:, 1]
+    rk4_x_coords = r_rk4[:, 0]
+    rk4_y_coords = r_rk4[:, 1]
 
     fig, ax = plt.subplots(figsize=(7, 7))
-    ax.plot(x_coords, y_coords, color="blue", lw=1.2, label="Orbit")
+    ax.plot(rk4_x_coords, rk4_y_coords, color="blue", lw=1.2, label="Orbit")
 
     # Earth — Radius 6,371,000m
     earth = plt.Circle((0,0), R_earth, color="dodgerblue", label="Earth")
@@ -221,10 +255,66 @@ def plot_results(positions, rk4_positions, dt, steps, altitude):
     plt.savefig("images/stage2_RK4_orbit.png", dpi=150, bbox_inches="tight")
     plt.close()
 
+    # Plotting Energy and Angular Momentum Conservation
+    # Calculating initial values
+    E0 = specific_energy(initial_state[:2], initial_state[2:])
+    h0 = angular_momentum(initial_state[:2], initial_state[2:])
+
+    # Relative errors in energy and angular momentum
+    energy_error_rk4 = np.array([(specific_energy(r, v) - E0) / abs(E0) for r, v in zip(r_rk4, v_rk4)])
+    energy_error_eul = np.array([(specific_energy(r, v) - E0) / abs(E0) for r, v in zip(r_euler, v_euler)])
+
+    angular_momentum_error_rk4 = np.array([(angular_momentum(r, v) - h0) / abs(h0) for r, v in zip(r_rk4, v_rk4)])
+    angular_momentum_error_eul = np.array([(angular_momentum(r, v) - h0) / abs(h0) for r, v in zip(r_euler, v_euler)])
+
+    time_array = np.arange(steps) * dt / 3600
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+
+    # Panel 1: Specific Energy Relative Error
+    ax1.plot(time_array, energy_error_eul, color='crimson', lw=1.5, label='Euler (1st Order)')
+    ax1.plot(time_array, energy_error_rk4, color='royalblue', lw=1.5, label='RK4 (4th Order)')
+    ax1.set_title('Stage 2: Relative Specific Mechanical Energy Error', fontsize=14)
+    ax1.set_ylabel('(E - E0) / |E0|', fontsize=12)
+    ax1.axhline(0, color='black', ls='--', lw=0.8)
+    ax1.legend(fontsize=12)
+
+    # Panel 2: Angular Momentum Relative Error
+    ax2.plot(time_array, angular_momentum_error_eul, color='crimson', lw=1.5, label='Euler')
+    ax2.plot(time_array, angular_momentum_error_rk4, color='royalblue', lw=1.5, label='RK4')
+    ax2.set_title('Stage 2: Relative Angular Momentum Error', fontsize=14)
+    ax2.set_xlabel('Time (hours)', fontsize=12)
+    ax2.set_ylabel('(h - h0) / |h0|', fontsize=12)
+    ax2.axhline(0, color='black', ls='--', lw=0.8)
+    ax2.legend(fontsize=12)
+
+    plt.tight_layout()
+    plt.savefig('images/stage2_energy_comparison.png', dpi=150, bbox_inches='tight')
+    plt.close()
+
+    # Orbit Comparison Plot (RK4 vs Euler)
+    fig, ax = plt.subplots(figsize=(8, 8))
+
+    ax.plot(euler_x_coords, euler_y_coords, color='crimson',   lw=0.8, alpha=0.7, label='Euler')
+    ax.plot(rk4_x_coords, rk4_y_coords, color='royalblue', lw=1.2, label='RK4')
+
+    earth = plt.Circle((0, 0), R_earth, color='dodgerblue', label='Earth')
+    ax.add_patch(earth)
+
+    ax.set_aspect('equal')
+    ax.set_title('Stage 2: Euler vs RK4 — 5 Orbital Periods', fontsize=13)
+    ax.set_xlabel('x position (m)', fontsize=10)
+    ax.set_ylabel('y position (m)', fontsize=10)
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig('images/stage2_orbit_comparison.png', dpi=150, bbox_inches='tight')
+    plt.close()
+
 
 if __name__ == "__main__":
     # 1. Initialization
     r0, v0 = calculate_initial_conditions(ALTITUDE)
+    initial_state = np.concatenate([r0,v0])
     
     # Verify gravity at initial position
     a_test = acceleration(r0)
@@ -266,20 +356,18 @@ if __name__ == "__main__":
         print("  Could not measure period (not enough complete orbits).")
     print()
 
-    # 5. RK4 Simulation
-    initial_state = np.concatenate([r0, v0])
+    # Running both propagators
+    states_rk4 = propagate(initial_state, dt, steps, method="rk4")
+    states_euler = propagate(initial_state, dt, steps, method="euler")
+
+    # Extracting positions and velocities from both methods
+    r_rk4, v_rk4 = states_rk4[:, :2], states_rk4[:, 2:]
+    r_euler, v_euler = states_euler[:, :2], states_euler[:, 2:]
     
-    rk4_positions = np.zeros((steps, 2))
-    s = initial_state.copy()
-
-    for i in range(steps):
-
-        # Records the current x,y positions
-        rk4_positions[i] = s[:2]
-
-        # Updates the state vector using RK4
-        s = rk4step(s, dt)
+    # Plot Forward Euler Orbit
+    euler_x_coords = r_euler[:, 0]
+    euler_y_coords = r_euler[:, 1]
     
-    # 6. Visualizations
-    plot_results(positions, rk4_positions, dt, steps, ALTITUDE)
+    # 5. Visualizations
+    plot_results(dt, steps, ALTITUDE)
     print("Plots saved to images/ directory.")

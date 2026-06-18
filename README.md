@@ -6,7 +6,7 @@ Validated against analytical results: gravitational acceleration at altitude and
 
 *Built to be an independent and self-researched aerospace lab.*
 
-![2D orbit of a 400 km satellite around Earth using Euler](./images/stage1_orbit.png)
+![Forward Euler vs RK4 Comparison Orbit Plot](./images/stage2_orbit_comparison.png)
 
 **Author: Yashaswi Burugupalli**
 
